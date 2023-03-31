@@ -24,22 +24,23 @@ func HomepageHandler(c *gin.Context) {
 }
 
 func main() {
-	// db, err := sql.Open("mysql", "root:@/games")
-	db, err := sql.Open("mysql", "root:Abcd1298.@tcp(127.0.0.1:3306)/cetec")
 
+	db, err := sql.Open("mysql", "root:Abcd1298.@tcp(127.0.0.1:3306)/cetec")
 	if err != nil {
 		fmt.Print(err.Error())
 	}
 	defer db.Close()
+
 	// make sure connection is available
 	err = db.Ping()
 	if err != nil {
 		fmt.Print(err.Error())
 	}
 
+	// Define router
 	router := gin.Default()
 
-	//Checking Server
+	// Checking Server
 	router.GET("/", HomepageHandler)
 
 	// GET a person detail
@@ -66,5 +67,81 @@ func main() {
 		c.JSON(http.StatusOK, result)
 	})
 
+	// POST add new person
+	router.POST("/person/create", func(c *gin.Context) {
+
+		var person Person
+		if err := c.ShouldBindJSON(&person); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// insert person
+		stmt, err := db.Prepare("insert into person (name) values(?);")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer stmt.Close()
+		res, err := stmt.Exec(person.Name)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		personId, err := res.LastInsertId()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// insert person info
+		stmt1, err := db.Prepare("insert into phone (number, person_id) values(?, ?);")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer stmt1.Close()
+		_, err = stmt1.Exec(person.PhoneNumber, personId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// insert address
+		stmt2, err := db.Prepare("insert into address (city, state, street1, street2, zip_code) values(?,?,?,?,?);")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer stmt2.Close()
+		res1, err := stmt2.Exec(person.City, person.State, person.Street1, person.Street2, person.ZipCode)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		addressId, err := res1.LastInsertId()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// insert address join
+		stmt3, err := db.Prepare("insert into address_join (person_id, address_id) values(?, ?);")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		defer stmt3.Close()
+		_, err = stmt3.Exec(personId, addressId)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("%s successfully created", person.Name),
+		})
+
+	})
 	router.Run(":8083")
 }
